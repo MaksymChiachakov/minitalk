@@ -16,11 +16,13 @@
 #include <stdio.h>
 #include <sys/types.h>
 
+// Наш ft_putchar для виводу символу при виклику
 void	ft_putchar(int c)
 {
 	write(1, &c, 1);
 }
 
+// Наш ft_putnbr для виводу чисел при виклику
 void	ft_putnbr(int nb)
 {
 	if (nb > 9)
@@ -31,20 +33,20 @@ void	ft_putnbr(int nb)
 	if (nb <= 9)
 		ft_putchar('0' + nb);
 }
-
-void	conv_text(char *s)
+// Конвертація тексту
+void	conv_text(char *s) // Отримуємо строку для конвертації
 {
 	int	i;
 	int	value;
 
 	i = 0;
 	value = 0;
-	while (i < 8)
+	while (i < 8) // Конвертування у бітах (тому і 8)
 	{
-		value = value * 2 + (s[i] == '1');
-		i++;
+		value = value * 2 + (s[i] == '1'); // Процес конвертації
+		i++; // Рухаємось у циклі
 	}
-	write(1, &value, 1);
+	write(1, &value, 1); // Повертаємо значення
 }
 
 void	alm_bin(int sig)
@@ -52,26 +54,27 @@ void	alm_bin(int sig)
 	static int	i;
 	static char	c[8];
 
-	if (sig == SIGUSR1)
+	if (sig == SIGUSR1) // Якщо ми получаємо SIGUSR1 то значення 1 в нашому сеті
 		c[i] = '1';
-	else
+	else // В іншому випадку, а точніше якщо ми получаємо SIGUSR2 то це 0 в нашому сеті
 		c[i] = '0';
-	i++;
-	if (i == 8)
+	i++; // Рухаємось далі
+	if (i == 8) // Коли ми дійшли до 8, тобто до кінця
 	{
-		conv_text(c);
-		i = 0;
+		conv_text(c); // Ми конвертуємо нашу зашифровану строку яка скаладається з 8-и бітів
+		i = 0; // Оновлюємо значення для і щоб працювати з наступними потенційними строками
 	}
-}
+} // Так як один характер у С це 1 байт, теоритично наш ліміт тут це 8 літер/букв
 
+// Наша головна програма
 int	main(void)
 {
-	getpid();
-	ft_putnbr(getpid());
-	write(1, "\n", 1);
-	signal(SIGUSR1, alm_bin);
-	signal(SIGUSR2, alm_bin);
-	while (1)
-		usleep(100);
-	return (0);
+	getpid(); // Получаємо індифікатор наш
+	ft_putnbr(getpid()); // Виводимо його у термінал
+	write(1, "\n", 1); // Нова лінія
+	signal(SIGUSR1, alm_bin); // Вказуємо що обробник подій для SIGUSR1 це функція alm_bin
+	signal(SIGUSR2, alm_bin); // Вказуємо що обробник подій для SIGUSR2 це функція alm_bin
+	while (1) // Створюємо нескінченний цикл щоб наш сервер чекав та слухав 
+		usleep(100); // Спимо 100 мікросекунд
+	return (0); // Кінець програми
 }
