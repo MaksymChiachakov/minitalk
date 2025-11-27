@@ -6,72 +6,109 @@
 /*   By: mchiacha <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/25 13:36:18 by mchiacha          #+#    #+#             */
-/*   Updated: 2025/11/25 18:00:01 by mchiacha         ###   ########.fr       */
+/*   Updated: 2025/11/27 17:41:01 by mchiacha         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <signal.h> 
+#include "./Libft/libft.h"
+#include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <sys/types.h>
 
-void	ft_putchar(int c)
+typedef struct s_state
 {
-	write(1, &c, 1);
-}
+	int				pidclient;
+	int				receiving_pid;
+	unsigned int	tmp_pid;
+	int				pid_bits;
+	char			*msg;
+	size_t			len;
+	unsigned char	byte;
+	int				bitcount;
+}	t_state;
 
-void	ft_putnbr(int nb)
-{
-	if (nb > 9)
-	{
-		ft_putnbr(nb / 10);
-		nb = nb % 10;
-	}
-	if (nb <= 9)
-		ft_putchar('0' + nb);
-}
+static t_state	g_g = {0, 1, 0, 0, NULL, 0, 0, 0};
 
-void	conv_text(char *s)
+void	add_byte(unsigned char b)
 {
-	int	i;
-	int	value;
+	char	*new;
+	size_t	i;
 
 	i = 0;
-	value = 0;
-	while (i < 8)
+	new = malloc(g_g.len + 2);
+	if (!new)
+		return ;
+	while (i < g_g.len)
 	{
-		value = value * 2 + (s[i] == '1');
+		new[i] = g_g.msg[i];
 		i++;
 	}
-	write(1, &value, 1);
+	new[g_g.len] = b;
+	new[g_g.len + 1] = '\0';
+	free(g_g.msg);
+	g_g.msg = new;
+	g_g.len++;
 }
 
-void	alm_bin(int sig)
+void	reset_message(void)
 {
-	static int	i;
-	static char	c[8];
+	write(1, g_g.msg, g_g.len);
+	write(1, "\n", 1);
+	free(g_g.msg);
+	g_g.msg = NULL;
+	g_g.len = 0;
+	g_g.receiving_pid = 1;
+	g_g.tmp_pid = 0;
+	g_g.pid_bits = 0;
+	g_g.pidclient = 0;
+}
 
-	if (sig == SIGUSR1)
-		c[i] = '1';
+void	me(void)
+{
+	if (g_g.byte == '\0')
+		reset_message();
 	else
-		c[i] = '0';
-	i++;
-	if (i == 8)
+		add_byte(g_g.byte);
+	g_g.byte = 0;
+	g_g.bitcount = 0;
+}
+
+void	handler(int sig, siginfo_t *info, void *ctx)
+{
+	(void)ctx;
+	if (g_g.receiving_pid)
 	{
-		conv_text(c);
-		i = 0;
+		g_g.tmp_pid = (g_g.tmp_pid << 1) | (sig == SIGUSR1);
+		g_g.pid_bits++;
+		if (g_g.pid_bits == 32)
+		{
+			g_g.pidclient = g_g.tmp_pid;
+			g_g.receiving_pid = 0;
+			g_g.tmp_pid = 0;
+			g_g.pid_bits = 0;
+		}
 	}
+	else
+	{
+		g_g.byte = (g_g.byte << 1) | (sig == SIGUSR1);
+		g_g.bitcount++;
+		if (g_g.bitcount == 8)
+			me();
+	}
+	kill(info->si_pid, SIGUSR1);
 }
 
 int	main(void)
 {
-	getpid();
+	struct sigaction	sa;
+
 	ft_putnbr(getpid());
 	write(1, "\n", 1);
-	signal(SIGUSR1, alm_bin);
-	signal(SIGUSR2, alm_bin);
+	sa.sa_sigaction = handler;
+	sa.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa.sa_mask);
+	sigaction(SIGUSR1, &sa, NULL);
+	sigaction(SIGUSR2, &sa, NULL);
 	while (1)
-		usleep(100);
-	return (0);
+		pause();
 }

@@ -13,6 +13,9 @@
 NAME_SERVER = server
 NAME_CLIENT = client
 
+LIBFT_DIR = ./Libft
+LIBFT = $(LIBFT_DIR)/libft.a
+
 SRCS_CLIENT = client.c
 SRCS_SERVER = server.c
 
@@ -25,17 +28,21 @@ OBJS_SERVER = $(SRCS_SERVER:.c=.o)
 OBJS_CLIENTBONUS = ${SRCS_CLIENTBONUS:.c=.o}
 OBJS_SERVERBONUS = ${SRCS_SERVERBONUS:.c=.o}
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Werror -MMD
+CC = cc
+CFLAGS = -Wall -Wextra -Werror
 RM = rm -f
+MAKE = make
 
-all: $(NAME_SERVER) $(NAME_CLIENT)
+all: $(LIBFT) $(NAME_SERVER) $(NAME_CLIENT)
+
+$(LIBFT):
+	make -C $(LIBFT_DIR)
 
 $(NAME_SERVER): $(OBJS_SERVER)
-	$(CC) $(CFLAGS) $(OBJS_SERVER) -o $(NAME_SERVER)
+	$(CC) $(CFLAGS) $(OBJS_SERVER) $(LIBFT) -o $(NAME_SERVER)
 
 $(NAME_CLIENT): $(OBJS_CLIENT)
-	$(CC) $(CFLAGS) $(OBJS_CLIENT) -o $(NAME_CLIENT)
+	$(CC) $(CFLAGS) $(OBJS_CLIENT) $(LIBFT) -o $(NAME_CLIENT)
 
 bonus: $(NAME_SERVER)_bonus $(NAME_CLIENT)_bonus
 
@@ -50,6 +57,7 @@ clean:
 
 fclean: clean
 	$(RM) $(NAME_CLIENT) $(NAME_SERVER)
+	$(MAKE) -C $(LIBFT_DIR) fclean
 
 re: fclean all
 

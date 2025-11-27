@@ -10,90 +10,118 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include<signal.h>
-#include<unistd.h>
-#include<stdio.h>
-#include<sys/types.h>
-#include<stdlib.h>
-#include <limits.h>
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
 
-static int	g_pidclient;
+#include <signal.h>
+#include <unistd.h>
+#include <stdlib.h>
 
-void	ft_putnbr(int num)
+typedef struct s_state
 {
-	int	c;
+    int             pidclient;
+    int             receiving_pid;
+    unsigned int    tmp_pid;
+    int             pid_bits;
 
-	if (num > 9)
-	{
-		ft_putnbr(num / 10);
-		num = num % 10;
-	}
-	if (num <= 9)
-	{
-		c = (('0' + num));
-		write(1, &c, 1);
-	}
+    char            *msg;
+    size_t          len;
+
+    unsigned char   byte;
+    int             bitcount;
+
+}   t_state;
+
+static t_state g = {0, 1, 0, 0, NULL, 0, 0, 0};
+
+void    add_byte(unsigned char b)
+{
+    char *new = malloc(g.len + 2);
+    if (!new)
+        return;
+    for (size_t i = 0; i < g.len; i++)
+        new[i] = g.msg[i];
+    new[g.len] = b;
+    new[g.len + 1] = '\0';
+    free(g.msg);
+    g.msg = new;
+    g.len++;
 }
 
-void	reset2(int *result, unsigned int *base)
+void    reset_message(void)
 {
-	g_pidclient = *result;
-	*result = 0;
-	*base = 128;
+    write(1, g.msg, g.len);
+    write(1, "\n", 1);
+
+    free(g.msg);
+    g.msg = NULL;
+    g.len = 0;
+
+    g.receiving_pid = 1;
+    g.tmp_pid = 0;
+    g.pid_bits = 0;
+    g.pidclient = 0;
 }
 
-void	reset(unsigned int *base, int *result, int *cont)
+void    handler(int sig, siginfo_t *info, void *ctx)
 {
-	if (*cont == 40 && *result != 0)
-	{
-		write(1, &*result, 1);
-		*base = 128;
-		*cont = 32;
-		*result = 0;
-	}
-	else if (*cont == 40 && *result == 0)
-	{
-		*cont = 0;
-		*base = 2147483648;
-	}
+    (void)ctx;
+
+    if (g.receiving_pid)
+    {
+        g.tmp_pid = (g.tmp_pid << 1) | (sig == SIGUSR1);
+        g.pid_bits++;
+
+        if (g.pid_bits == 32)
+        {
+            g.pidclient = g.tmp_pid;
+            g.receiving_pid = 0;
+            g.tmp_pid = 0;
+            g.pid_bits = 0;
+        }
+    }
+    else
+    {
+        g.byte = (g.byte << 1) | (sig == SIGUSR1);
+        g.bitcount++;
+
+        if (g.bitcount == 8)
+        {
+            if (g.byte == '\0')
+                reset_message();
+            else
+                add_byte(g.byte);
+
+            g.byte = 0;
+            g.bitcount = 0;
+        }
+    }
+
+    kill(info->si_pid, SIGUSR1); 
 }
 
-void	conv_txt(int bit)
+void    ft_putnbr(int n)
 {
-	static unsigned int		base = 2147483648;
-	static int				result = 0;
-	static int				cont = 0;
-
-	if (cont < 32)
-	{
-		if (bit == SIGUSR1)
-			result = result + base;
-		base = base / 2;
-	}
-	if (cont == 31)
-		reset2(&result, &base);
-	if (cont >= 32 && cont <= 39)
-	{
-		if (bit == SIGUSR1)
-			result = result + base;
-		base = base / 2;
-		kill(g_pidclient, SIGUSR1);
-	}
-	cont++;
-	if (result == 0 && cont == 40)
-		reset(&base, &result, &cont);
-	if (cont == 40)
-		reset(&base, &result, &cont);
+    if (n >= 10)
+        ft_putnbr(n / 10);
+    char c = '0' + (n % 10);
+    write(1, &c, 1);
 }
 
-int	main(void)
+int main(void)
 {
-	ft_putnbr(getpid());
-	write(1, "\n", 1);
-	signal(SIGUSR1, conv_txt);
-	signal(SIGUSR2, conv_txt);
-	pause();
-	while (1)
-		sleep(1);
-	return (0);
+    struct sigaction sa;
+
+    ft_putnbr(getpid());
+    write(1, "\n", 1);
+
+    sa.sa_sigaction = handler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGUSR1, &sa, NULL);
+    sigaction(SIGUSR2, &sa, NULL);
+
+    while (1)
+        pause();
 }

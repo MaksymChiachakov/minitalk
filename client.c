@@ -6,65 +6,66 @@
 /*   By: mchiacha <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/11/25 13:28:22 by mchiacha          #+#    #+#             */
-/*   Updated: 2025/11/25 17:59:41 by mchiacha         ###   ########.fr       */
+/*   Updated: 2025/11/27 15:43:20 by mchiacha         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <unistd.h>
 #include <signal.h>
-#include <limits.h>
-#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
 #include <stdio.h>
 
-int	ft_atoi(char *str)
-{
-	long long int	res;
+volatile int g_ack = 0;
 
-	res = 0;
-	while (*str >= '0' && *str <= '9')
-	{
-		res = res * 10 + (*str - '0');
-		str++;
-		if (res > INT_MAX)
-			return (-1);
-	}
-	return (res);
+void ack_handler(int sig)
+{
+    (void)sig;
+    g_ack = 1;
 }
 
-void	conv_bin(char *s, int pidserv)
+void send_bit(int pid, int bit)
 {
-	int	i;
-	int	base;
-	int	letra;
-
-	i = 0;
-	while (s[i])
-	{
-		base = 128;
-		letra = s[i];
-		while (base > 0)
-		{
-			if (letra >= base)
-			{
-				kill(pidserv, SIGUSR1);
-				letra = letra - base;
-			}
-			else
-				kill(pidserv, SIGUSR2);
-			base = base / 2;
-			usleep(200);
-		}
-		i++;
-	}
+    kill(pid, bit ? SIGUSR1 : SIGUSR2);
+    while (!g_ack)
+        usleep(10);
+    g_ack = 0;
 }
 
-int	main(int argc, char **argv)
+void send_int(int pid, unsigned int n)
 {
-	int	pidserv;
+    for (int i = 31; i >= 0; i--)
+        send_bit(pid, (n >> i) & 1);
+}
 
-	if (argc != 3)
-		return (-1);
-	pidserv = ft_atoi(argv[1]);
-	conv_bin(argv[2], pidserv);
-	return (0);
+void send_char(int pid, unsigned char c)
+{
+    for (int i = 7; i >= 0; i--)
+        send_bit(pid, (c >> i) & 1);
+}
+
+int ft_atoi(const char *s)
+{
+    long n = 0;
+    while (*s >= '0' && *s <= '9')
+        n = n * 10 + (*s++ - '0');
+    return (int)n;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc != 3)
+        return (1);
+
+    signal(SIGUSR1, ack_handler);
+
+    int pid = ft_atoi(argv[1]);
+
+    send_int(pid, getpid());
+
+    for (int i = 0; argv[2][i]; i++)
+        send_char(pid, argv[2][i]);
+
+    send_char(pid, '\0');
+
+    return (0);
 }

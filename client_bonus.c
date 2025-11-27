@@ -10,102 +10,62 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include<signal.h>
-#include<unistd.h>
-#include<stdio.h>
-#include<sys/types.h>
-#include<limits.h>
-#include<stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-int	ft_atoi(const char *str)
+volatile int g_ack = 0;
+
+void ack_handler(int sig)
 {
-	int				i;
-	long long int	nbr;
-
-	nbr = 0;
-	i = 0;
-	while (str[i] >= '0' && str[i] <= '9')
-	{
-		nbr = nbr * 10 + str[i] - '0';
-		i++;
-		if (nbr > INT_MAX)
-			return (-1);
-	}
-	return (nbr);
+    (void)sig;
+    g_ack = 1;
 }
 
-void	conv_int_bin(unsigned int c, int pidserv)
+void send_bit(int pid, int bit)
 {
-	unsigned int		base;
-	unsigned int		cont;
-
-	cont = 0;
-	base = 2147483648;
-	if (cont < 32)
-	{
-		while (base > 0)
-		{
-			if (c >= base)
-			{
-				kill(pidserv, SIGUSR1);
-				c = c - base;
-			}
-			else
-			{
-				kill(pidserv, SIGUSR2);
-			}
-			base = base / 2;
-			usleep(300);
-		}
-	}
-	usleep(500);
-	cont++;
+    kill(pid, bit ? SIGUSR1 : SIGUSR2);
+    while (!g_ack)
+        usleep(10);
+    g_ack = 0;
 }
 
-void	conv_bin(unsigned char c, int pidserv)
+void send_int(int pid, unsigned int n)
 {
-	int		base;
-
-	base = 128;
-	while (base > 0)
-	{
-		if (c >= base)
-		{
-			kill(pidserv, SIGUSR1);
-			c = c - base;
-		}
-		else
-		{
-			kill(pidserv, SIGUSR2);
-		}
-		base = base / 2;
-		usleep(300);
-	}
-	usleep(500);
+    for (int i = 31; i >= 0; i--)
+        send_bit(pid, (n >> i) & 1);
 }
 
-void	confirm(int sig)
+void send_char(int pid, unsigned char c)
 {
-	if (sig == SIGUSR1)
-		write (1, "Received bit\n", 13);
+    for (int i = 7; i >= 0; i--)
+        send_bit(pid, (c >> i) & 1);
 }
 
-int	main(int argc, char **argv)
+int ft_atoi(const char *s)
 {
-	int	pidserv;
-	int	i;
+    long n = 0;
+    while (*s >= '0' && *s <= '9')
+        n = n * 10 + (*s++ - '0');
+    return (int)n;
+}
 
-	i = 0;
-	if (argc != 3)
-		return (-1);
-	signal(SIGUSR1, confirm);
-	pidserv = ft_atoi(argv[1]);
-	conv_int_bin(getpid(), pidserv);
-	while (argv[2][i])
-	{
-		conv_bin(argv[2][i], pidserv);
-		i++;
-	}
-	conv_bin('\0', pidserv);
-	return (0);
+int main(int argc, char **argv)
+{
+    if (argc != 3)
+        return (1);
+
+    signal(SIGUSR1, ack_handler);
+
+    int pid = ft_atoi(argv[1]);
+
+    send_int(pid, getpid());
+
+    for (int i = 0; argv[2][i]; i++)
+        send_char(pid, argv[2][i]);
+
+    send_char(pid, '\0');
+
+    return (0);
 }
